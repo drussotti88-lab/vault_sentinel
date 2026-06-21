@@ -87,6 +87,11 @@ export const retailers = {
       .eq('id', id);
     if (error) throw new Error(error.message);
   },
+
+  async setConfig(id: string, config: Record<string, unknown>): Promise<void> {
+    const { error } = await getSupabase().from('retailers').update({ config }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
 };
 
 // ------------------------------- Watches ------------------------------------

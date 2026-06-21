@@ -110,6 +110,25 @@ export const commandDefinitions = [
     .setDescription('Force an immediate poll (debug)')
     .addStringOption((o) => o.setName('id').setDescription('Watch id').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('set-retailer-config')
+    .setDescription('Set a config value on a retailer (API key, store id, proxy, etc.)')
+    .addStringOption((o) => o.setName('retailer').setDescription('Retailer name').setRequired(true))
+    .addStringOption((o) =>
+      o
+        .setName('key')
+        .setDescription('Config key, e.g. apiKey, storeId, zip, inventoryUrl, queueStatusUrl')
+        .setRequired(true),
+    )
+    .addStringOption((o) => o.setName('value').setDescription('Value to set').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('get-retailer-config')
+    .setDescription("Show a retailer's config (secrets masked)")
+    .addStringOption((o) => o.setName('retailer').setDescription('Retailer name').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ].map((b) => b.toJSON());
 
 // ---------------------------------------------------------------------------
@@ -140,6 +159,10 @@ export async function handleInteraction(
         return await status(interaction, deps);
       case 'check-now':
         return await checkNow(interaction, deps);
+      case 'set-retailer-config':
+        return await setRetailerConfig(interaction);
+      case 'get-retailer-config':
+        return await getRetailerConfig(interaction);
       default:
         await interaction.reply({ content: 'Unknown command.', ephemeral: true });
     }
@@ -309,4 +332,43 @@ async function checkNow(
   await interaction.editReply(
     `Checked \`${id}\`: inStock=${result.inStock}, price=${price}, confidence=${result.confidence}.`,
   );
+}
+
+async function setRetailerConfig(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('retailer', true);
+  const key = interaction.options.getString('key', true).trim();
+  const value = interaction.options.getString('value', true);
+  const retailer = await retailerRepo.getByName(name);
+  if (!retailer) throw new Error(`No retailer named "${name}".`);
+
+  const config = { ...retailer.config, [key]: value };
+  await retailerRepo.setConfig(retailer.id, config);
+  await interaction.editReply(
+    `Set \`${key}\` on **${retailer.name}**. The engine applies it on its next config refresh (~1 min).`,
+  );
+}
+
+async function getRetailerConfig(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('retailer', true);
+  const retailer = await retailerRepo.getByName(name);
+  if (!retailer) throw new Error(`No retailer named "${name}".`);
+
+  const keys = Object.keys(retailer.config);
+  if (keys.length === 0) {
+    await interaction.editReply(`**${retailer.name}** has no config set.`);
+    return;
+  }
+  const lines = keys.map((k) => `\`${k}\`: ${maskConfigValue(k, retailer.config[k])}`);
+  await interaction.editReply([`**${retailer.name}** config:`, ...lines].join('\n').slice(0, 1900));
+}
+
+/** Mask secret-looking values so /get-retailer-config doesn't echo full keys. */
+function maskConfigValue(key: string, value: unknown): string {
+  const s = String(value);
+  if (/key|token|secret|password|proxy/i.test(key) && s.length > 6) {
+    return `${'•'.repeat(s.length - 4)}${s.slice(-4)}`;
+  }
+  return s.length > 80 ? `${s.slice(0, 77)}…` : s;
 }
