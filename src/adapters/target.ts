@@ -27,6 +27,18 @@ import type { Watch } from '../db/types.js';
 
 const REDSKY_BASE = 'https://redsky.target.com/redsky_aggregations/v1/web';
 
+/**
+ * RedSky's edge (Akamai) commonly 403s requests that don't look like they came
+ * from target.com — so pair the browser UA with an Origin/Referer of the site.
+ */
+function redskyHeaders(ua: string): Record<string, string> {
+  return {
+    ...browserHeaders(ua),
+    Origin: 'https://www.target.com',
+    Referer: 'https://www.target.com/',
+  };
+}
+
 function tcinFromUrl(url: string): string | null {
   // .../p/<slug>/-/A-91234567  (also tolerates a bare numeric id)
   const m = url.match(/\/A-(\d+)/i) ?? url.match(/(?:^|\/)(\d{6,})(?:\?|$)/);
@@ -79,7 +91,7 @@ export const targetAdapter: RetailerAdapter = {
       `${REDSKY_BASE}/pdp_client_v1?key=${encodeURIComponent(cfg.apiKey)}` +
       `&tcin=${tcin}&store_id=${encodeURIComponent(cfg.storeId)}&pricing_store_id=${encodeURIComponent(cfg.storeId)}`;
 
-    const res = await ctx.http.get(endpoint, { headers: browserHeaders(ua) });
+    const res = await ctx.http.get(endpoint, { headers: redskyHeaders(ua) });
     const body = res.json<RedskyPdpResponse>();
     const item = body?.data?.product?.item;
     const name = item?.product_description?.title;
@@ -102,7 +114,7 @@ export const targetAdapter: RetailerAdapter = {
 
     await ctx.rateLimiter.acquire();
     const ua = ctx.userAgent();
-    const headers = browserHeaders(ua);
+    const headers = redskyHeaders(ua);
 
     try {
       // Product detail (name, price, image) + fulfillment (availability) in parallel.
@@ -200,7 +212,7 @@ export const targetAdapter: RetailerAdapter = {
     else throw new Error(`Unknown Target discovery type "${kind}" (use category:<id> or keyword:<term>)`);
 
     const res = await ctx.http.get(`${REDSKY_BASE}/plp_search_v2?${params.toString()}`, {
-      headers: browserHeaders(ctx.userAgent()),
+      headers: redskyHeaders(ctx.userAgent()),
     });
     const body = res.json<RedskyPlpResponse>();
     const products = body?.data?.search?.products ?? [];
