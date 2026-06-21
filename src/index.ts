@@ -14,6 +14,18 @@ async function main(): Promise<void> {
   const logger = createLogger(cfg.logLevel, { component: 'main' });
   logger.info('Sentinel starting', { env: cfg.ebay.env });
 
+  // Catch-all diagnostics so a stray async error is logged with its full stack
+  // instead of crashing the container with a one-line message. A long-running
+  // bot/poller is better off logging and continuing than looping on restart.
+  process.on('unhandledRejection', (reason) => {
+    logger.error('unhandledRejection', {
+      error: reason instanceof Error ? reason : new Error(String(reason)),
+    });
+  });
+  process.on('uncaughtException', (err) => {
+    logger.error('uncaughtException', { error: err });
+  });
+
   const engine = new Engine();
 
   // Start the bot first so commands are live while the engine warms up. The
@@ -22,7 +34,9 @@ async function main(): Promise<void> {
 
   // Engine.start() runs the poll loop forever; don't await it past startup.
   void engine.start().catch((err) => {
-    logger.error('engine crashed', { error: (err as Error).message });
+    logger.error('engine crashed', {
+      error: err instanceof Error ? err : new Error(String(err)),
+    });
     process.exit(1);
   });
 
