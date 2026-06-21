@@ -1,5 +1,11 @@
-import type { RetailerAdapter, CheckResult, AdapterContext, ResolveResult } from './types.js';
-import { errorResult } from './types.js';
+import type {
+  RetailerAdapter,
+  CheckResult,
+  AdapterContext,
+  ResolveResult,
+  DiscoveredProduct,
+} from './types.js';
+import { errorResult, DISCOVER_PREFIX, isDiscoverDirective } from './types.js';
 import { browserHeaders } from '../lib/userAgents.js';
 import { HttpError } from '../lib/http.js';
 import type { Watch } from '../db/types.js';
@@ -57,6 +63,12 @@ export const targetAdapter: RetailerAdapter = {
   },
 
   async resolve(url: string, ctx: AdapterContext): Promise<ResolveResult> {
+    // Catalog-discovery watch (e.g. `discover:category:abc` or `discover:keyword:pokemon`).
+    if (isDiscoverDirective(url)) {
+      const directive = url.slice(DISCOVER_PREFIX.length).trim();
+      return { productId: `${DISCOVER_PREFIX}${directive}`, displayName: `Discovery: ${directive}` };
+    }
+
     const tcin = tcinFromUrl(url);
     if (!tcin) throw new Error(`Could not extract a tcin from URL: ${url}`);
 
@@ -156,6 +168,56 @@ export const targetAdapter: RetailerAdapter = {
       return errorResult(watch.source_url, 'unknown', (err as Error).message, true);
     }
   },
+
+  /**
+   * Catalog discovery via RedSky PLP search (`plp_search_v2`) — the same public
+   * JSON the site's own search uses. Directive is `category:<id>` or
+   * `keyword:<term>`; returns the current page of products so the engine can spot
+   * newly-listed TCINs (often live before a product is publicly linked/buyable).
+   */
+  async discover(watch: Watch, ctx: AdapterContext): Promise<DiscoveredProduct[]> {
+    const cfg = readConfig(ctx); // throws a clear error if apiKey is missing
+    const directive = watch.product_id.slice(DISCOVER_PREFIX.length);
+    const sep = directive.indexOf(':');
+    const kind = sep === -1 ? directive : directive.slice(0, sep);
+    const value = sep === -1 ? '' : directive.slice(sep + 1);
+    if (!value) throw new Error('Target discovery needs `category:<id>` or `keyword:<term>`');
+
+    await ctx.rateLimiter.acquire();
+    const params = new URLSearchParams({
+      key: cfg.apiKey,
+      channel: 'WEB',
+      count: '48',
+      offset: '0',
+      default_purchasability_filter: 'true',
+    });
+    if (cfg.storeId) {
+      params.set('pricing_store_id', cfg.storeId);
+      params.set('store_ids', cfg.storeId);
+    }
+    if (kind === 'keyword') params.set('keyword', value);
+    else if (kind === 'category') params.set('category', value);
+    else throw new Error(`Unknown Target discovery type "${kind}" (use category:<id> or keyword:<term>)`);
+
+    const res = await ctx.http.get(`${REDSKY_BASE}/plp_search_v2?${params.toString()}`, {
+      headers: browserHeaders(ctx.userAgent()),
+    });
+    const body = res.json<RedskyPlpResponse>();
+    const products = body?.data?.search?.products ?? [];
+    const out: DiscoveredProduct[] = [];
+    for (const p of products) {
+      if (!p.tcin) continue;
+      const tcin = String(p.tcin);
+      out.push({
+        productId: tcin,
+        name: decodeEntities(p.item?.product_description?.title ?? `Target ${tcin}`),
+        url: `https://www.target.com/p/-/A-${tcin}`,
+        image: p.item?.enrichment?.images?.primary_image_url ?? null,
+        price: p.price?.current_retail ?? null,
+      });
+    }
+    return out;
+  },
 };
 
 // --- Minimal typings for the RedSky payloads we read (defensive/optional). ---
@@ -171,6 +233,21 @@ interface RedskyPdpResponse {
         current_retail?: number;
         formatted_current_price_num?: number;
       };
+    };
+  };
+}
+
+interface RedskyPlpResponse {
+  data?: {
+    search?: {
+      products?: Array<{
+        tcin?: string;
+        item?: {
+          product_description?: { title?: string };
+          enrichment?: { images?: { primary_image_url?: string } };
+        };
+        price?: { current_retail?: number };
+      }>;
     };
   };
 }

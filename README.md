@@ -99,6 +99,24 @@ third-party API keys, proxy refs) live in the retailer's `config` JSONB.
 The bot needs **Manage Channels** (for category/channel creation) and **Manage
 Webhooks**.
 
+## Catalog discovery — "new-product watcher" (pre-drop visibility)
+
+Beyond watching a known product, you can watch a retailer's **catalog** and get a
+`🆕` alert the moment a brand-new SKU appears — often days before it's buyable.
+Create one through the normal `/add-item` (or the dashboard's Add-item form) by
+passing a `discover:` directive as the URL instead of a product link:
+
+| Retailer | Directive | Source |
+| --- | --- | --- |
+| Target | `discover:keyword:<term>` or `discover:category:<id>` | RedSky `plp_search_v2` (reliable; needs `config.apiKey`) |
+| Pokémon Center | `discover:sitemap` or `discover:new-releases` | public product sitemap / new-releases page (best-effort; Cloudflare → wants a proxy) |
+
+How it works: each scan diffs the listing against your existing watches; any new
+product is added to your watch list **paused** and announced in the retailer's
+channel. The first scan seeds silently (no alert storm); later scans announce.
+Resume the paused items you actually want to stock-watch. Strictly read-only —
+no anti-bot bypass, no queue circumvention (PRD §24).
+
 ## Adding a retailer (the unit of extension — PRD §10)
 
 1. Implement `RetailerAdapter` (`resolve()` + `check()`) in `src/adapters/`.

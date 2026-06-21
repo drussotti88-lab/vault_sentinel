@@ -1,5 +1,11 @@
-import type { RetailerAdapter, CheckResult, AdapterContext, ResolveResult } from './types.js';
-import { errorResult } from './types.js';
+import type {
+  RetailerAdapter,
+  CheckResult,
+  AdapterContext,
+  ResolveResult,
+  DiscoveredProduct,
+} from './types.js';
+import { errorResult, DISCOVER_PREFIX, isDiscoverDirective } from './types.js';
 import { browserHeaders } from '../lib/userAgents.js';
 import { HttpError } from '../lib/http.js';
 import type { Watch } from '../db/types.js';
@@ -92,9 +98,50 @@ export const pokemonCenterAdapter: RetailerAdapter = {
   },
 
   async resolve(url: string): Promise<ResolveResult> {
+    // Catalog-discovery watch (`discover:sitemap` or `discover:new-releases`).
+    if (isDiscoverDirective(url)) {
+      const directive = url.slice(DISCOVER_PREFIX.length).trim() || 'sitemap';
+      return { productId: `${DISCOVER_PREFIX}${directive}`, displayName: `Discovery: ${directive}` };
+    }
     const slug = slugFromUrl(url);
     if (!slug) throw new Error(`Could not extract a Pokémon Center product id from URL: ${url}`);
     return { productId: slug };
+  },
+
+  /**
+   * Best-effort catalog discovery by reading the PUBLIC product sitemap (or the
+   * new-releases listing) and extracting product PIDs. ToS-respecting (no auth,
+   * no cart). Pokémon Center sits behind Cloudflare, so bare requests are often
+   * 403'd — this becomes reliable once a residential proxy (PROXY_POOL_URL) is
+   * configured; until then the engine logs the failure quietly and moves on.
+   */
+  async discover(watch: Watch, ctx: AdapterContext): Promise<DiscoveredProduct[]> {
+    const directive = watch.product_id.slice(DISCOVER_PREFIX.length) || 'sitemap';
+    const listingUrl =
+      directive === 'new-releases'
+        ? 'https://www.pokemoncenter.com/category/new-releases'
+        : 'https://www.pokemoncenter.com/sitemaps/products.xml';
+
+    await ctx.rateLimiter.acquire();
+    const res = await ctx.http.get(listingUrl, { headers: browserHeaders(ctx.userAgent()) });
+
+    const re = /\/product\/(\d{3}-\d{5})\/([a-z0-9-]+)/gi;
+    const seen = new Set<string>();
+    const out: DiscoveredProduct[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(res.text)) !== null) {
+      const pid = m[1];
+      const slug = m[2];
+      if (!pid || !slug || seen.has(pid)) continue;
+      seen.add(pid);
+      out.push({
+        productId: pid,
+        name: slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        url: `https://www.pokemoncenter.com/product/${pid}/${slug}`,
+      });
+      if (out.length >= 150) break;
+    }
+    return out;
   },
 
   async check(watch: Watch, ctx: AdapterContext): Promise<CheckResult> {
