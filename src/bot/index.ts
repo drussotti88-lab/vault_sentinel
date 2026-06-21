@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { loadConfig } from '../lib/config.js';
 import { createLogger } from '../lib/logger.js';
-import { handleInteraction, type CommandDeps } from './commands.js';
+import { handleInteraction, commandDefinitions, type CommandDeps } from './commands.js';
 import type { Engine } from '../core/engine.js';
 
 /**
@@ -19,8 +19,29 @@ export async function startBot(opts: { engine?: Engine } = {}): Promise<Client> 
   const deps: CommandDeps = {};
   if (opts.engine) deps.engine = opts.engine;
 
-  client.once(Events.ClientReady, (c) => {
+  client.once(Events.ClientReady, async (c) => {
     logger.info('bot ready', { user: c.user.tag });
+
+    // Auto-register slash commands on startup using the already-authenticated
+    // client, so production hosts (e.g. Railway) need no separate tsx-based
+    // `register-commands` step. Guild-scoped registration updates instantly
+    // (vs. ~1h for global), which suits a single-guild deployment (PRD §15).
+    try {
+      if (cfg.discord.guildId) {
+        await c.application.commands.set(commandDefinitions, cfg.discord.guildId);
+        logger.info('registered guild commands', {
+          guildId: cfg.discord.guildId,
+          count: commandDefinitions.length,
+        });
+      } else {
+        await c.application.commands.set(commandDefinitions);
+        logger.info('registered global commands', { count: commandDefinitions.length });
+      }
+    } catch (err) {
+      // Don't crash the bot if registration fails — log loudly and keep serving
+      // any commands already registered.
+      logger.error('failed to register commands', { error: (err as Error).message });
+    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
