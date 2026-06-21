@@ -49,6 +49,16 @@ export async function startBot(opts: { engine?: Engine } = {}): Promise<Client> 
     await handleInteraction(interaction, deps);
   });
 
+  // A transient gateway hiccup makes discord.js emit 'error'/'shardError'. An
+  // unhandled 'error' event crashes the Node process outright, so we log it and
+  // let the client's built-in auto-reconnect recover instead of dying.
+  client.on(Events.Error, (err) => {
+    logger.error('discord client error', { error: err });
+  });
+  client.on(Events.ShardError, (err, shardId) => {
+    logger.error('discord shard error', { error: err, shardId });
+  });
+
   await client.login(cfg.discord.botToken);
   return client;
 }
