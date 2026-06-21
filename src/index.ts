@@ -2,6 +2,7 @@ import { loadConfig } from './lib/config.js';
 import { createLogger } from './lib/logger.js';
 import { Engine } from './core/engine.js';
 import { startBot } from './bot/index.js';
+import { startControlApi } from './api/server.js';
 
 /**
  * Worker entrypoint (PRD §21): the persistent process running the core engine
@@ -32,6 +33,10 @@ async function main(): Promise<void> {
   // engine reference lets /check-now and /status query live state.
   const client = await startBot({ engine });
 
+  // Web control API for the dashboard (watch-list management). Shares the same
+  // actions as the slash commands; gated by CONTROL_API_TOKEN.
+  const api = startControlApi({ logger });
+
   // Engine.start() runs the poll loop forever; don't await it past startup.
   void engine.start().catch((err) => {
     logger.error('engine crashed', {
@@ -44,6 +49,7 @@ async function main(): Promise<void> {
     logger.info('shutting down', { signal });
     engine.stop();
     void client.destroy();
+    api.close();
     setTimeout(() => process.exit(0), 1000);
   };
   process.on('SIGINT', () => shutdown('SIGINT'));

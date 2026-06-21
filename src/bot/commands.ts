@@ -6,9 +6,9 @@ import {
 import { loadConfig } from '../lib/config.js';
 import { createLogger } from '../lib/logger.js';
 import { retailers as retailerRepo, watches as watchRepo } from '../db/repositories.js';
-import { getAdapter, listAdapterTypes } from '../adapters/registry.js';
-import { buildAdapterContext } from '../adapters/context.js';
+import { listAdapterTypes } from '../adapters/registry.js';
 import { DiscordRest } from '../lib/discordRest.js';
+import * as actions from '../service/watchActions.js';
 import type { AdapterType } from '../db/types.js';
 import type { Engine } from '../core/engine.js';
 
@@ -206,47 +206,26 @@ async function addRetailer(interaction: ChatInputCommandInteraction): Promise<vo
 async function addItem(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
   const retailerName = interaction.options.getString('retailer', true);
-  const url = interaction.options.getString('url', true);
-  const threshold = interaction.options.getNumber('threshold');
-  const nameOverride = interaction.options.getString('name');
-  const interval = interaction.options.getInteger('interval');
-  const tcgSku = interaction.options.getString('tcg_sku');
-
-  const retailer = await retailerRepo.getByName(retailerName);
-  if (!retailer) throw new Error(`No retailer named "${retailerName}". Add it with /add-retailer.`);
-
-  const adapter = getAdapter(retailer.adapter_type);
-  const ctx = buildAdapterContext(retailer, logger);
-  const resolved = await adapter.resolve(url, ctx);
-
-  const watch = await watchRepo.create({
-    retailer_id: retailer.id,
-    product_id: resolved.productId,
-    source_url: url,
-    display_name: nameOverride ?? resolved.displayName ?? null,
-    image_url: resolved.image ?? null,
-    threshold: threshold ?? null,
-    tcg_sku: tcgSku ?? null,
-    interval_sec: interval ?? null,
+  const watch = await actions.addItem({
+    retailer: retailerName,
+    url: interaction.options.getString('url', true),
+    threshold: interaction.options.getNumber('threshold'),
+    name: interaction.options.getString('name'),
+    interval: interaction.options.getInteger('interval'),
+    tcgSku: interaction.options.getString('tcg_sku'),
   });
 
-  const thresholdText = threshold !== null ? ` ≤ $${threshold.toFixed(2)}` : ' (any price)';
+  const thresholdText =
+    watch.threshold !== null ? ` ≤ $${watch.threshold.toFixed(2)}` : ' (any price)';
   await interaction.editReply(
-    `Watching **${watch.display_name ?? resolved.productId}** on **${retailer.name}**${thresholdText}.\nId: \`${watch.id}\``,
+    `Watching **${watch.display_name ?? watch.product_id}** on **${retailerName}**${thresholdText}.\nId: \`${watch.id}\``,
   );
 }
 
 async function listWatches(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
   const retailerName = interaction.options.getString('retailer');
-  let rows;
-  if (retailerName) {
-    const retailer = await retailerRepo.getByName(retailerName);
-    if (!retailer) throw new Error(`No retailer named "${retailerName}".`);
-    rows = await watchRepo.listByRetailer(retailer.id);
-  } else {
-    rows = await watchRepo.listAll();
-  }
+  const rows = await actions.listWatches(retailerName ?? undefined);
   if (rows.length === 0) {
     await interaction.editReply('No watches.');
     return;
@@ -262,20 +241,9 @@ async function listWatches(interaction: ChatInputCommandInteraction): Promise<vo
   await interaction.editReply(lines.slice(0, 1900));
 }
 
-async function resolveWatchId(idPrefix: string): Promise<string> {
-  // Accept full id or a short 8-char prefix from /list-watches output.
-  const direct = await watchRepo.get(idPrefix);
-  if (direct) return direct.id;
-  const all = await watchRepo.listAll();
-  const match = all.find((w) => w.id.startsWith(idPrefix));
-  if (!match) throw new Error(`No watch matching id "${idPrefix}".`);
-  return match.id;
-}
-
 async function removeItem(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
-  const id = await resolveWatchId(interaction.options.getString('id', true));
-  await watchRepo.remove(id);
+  const id = await actions.removeItem(interaction.options.getString('id', true));
   await interaction.editReply(`Removed watch \`${id}\`.`);
 }
 
@@ -284,24 +252,21 @@ async function toggleItem(
   enabled: boolean,
 ): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
-  const id = await resolveWatchId(interaction.options.getString('id', true));
-  await watchRepo.setEnabled(id, enabled);
+  const id = await actions.setItemEnabled(interaction.options.getString('id', true), enabled);
   await interaction.editReply(`${enabled ? 'Resumed' : 'Paused'} watch \`${id}\`.`);
 }
 
 async function setThreshold(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
-  const id = await resolveWatchId(interaction.options.getString('id', true));
   const value = interaction.options.getNumber('value', true);
-  await watchRepo.setThreshold(id, value);
+  const id = await actions.setItemThreshold(interaction.options.getString('id', true), value);
   await interaction.editReply(`Threshold for \`${id}\` set to $${value.toFixed(2)}.`);
 }
 
 async function setInterval(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
-  const id = await resolveWatchId(interaction.options.getString('id', true));
   const seconds = interaction.options.getInteger('seconds', true);
-  await watchRepo.setInterval(id, seconds);
+  const id = await actions.setItemInterval(interaction.options.getString('id', true), seconds);
   await interaction.editReply(`Interval for \`${id}\` set to ${seconds}s.`);
 }
 
@@ -330,7 +295,7 @@ async function checkNow(
     await interaction.editReply('Engine not attached to this process; cannot force a poll.');
     return;
   }
-  const id = await resolveWatchId(interaction.options.getString('id', true));
+  const id = await actions.resolveWatchId(interaction.options.getString('id', true));
   const result = await deps.engine.checkNow(id);
   if (!result) {
     await interaction.editReply(`Watch \`${id}\` not found or not enabled.`);
