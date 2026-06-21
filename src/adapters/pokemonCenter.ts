@@ -120,14 +120,24 @@ export const pokemonCenterAdapter: RetailerAdapter = {
       };
     }
 
-    // 2. Queue idle -> normal availability poll.
+    // 2. Queue idle. With no inventory endpoint configured this is a queue-only
+    // watch: stay quiet and keep sensing the queue every cycle instead of
+    // erroring — so PC queue-watching runs always-on in the background with zero
+    // config (no #ops spam, no circuit-breaker trips). Trade-off: no stock signal
+    // while idle; set config.inventoryUrl (+ a proxy) to also detect in-stock.
     if (!cfg.inventoryUrl) {
-      return errorResult(
-        watch.source_url,
-        'config',
-        'Pokémon Center adapter requires config.inventoryUrl when queue is idle',
-        false,
-      );
+      return {
+        inStock: false,
+        confidence: 'inferred',
+        price: watch.last_price,
+        currency: 'USD',
+        name: watch.display_name ?? 'Pokémon Center item',
+        image: watch.image_url ?? null,
+        url: watch.source_url,
+        addToCartUrl: null,
+        stockQty: null,
+        queue: { active: false },
+      };
     }
 
     const inventoryUrl = cfg.inventoryUrl.replace('{slug}', encodeURIComponent(watch.product_id));
