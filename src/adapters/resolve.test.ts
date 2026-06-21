@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { walmartAdapter } from './walmart.js';
 import { pokemonCenterAdapter } from './pokemonCenter.js';
 import { ebayAdapter } from './ebay.js';
+import { targetAdapter } from './target.js';
 import type { AdapterContext } from './types.js';
 
 // These adapters' resolve() are pure URL parsing (no network), so we can pass a
@@ -46,4 +47,14 @@ test('ebay resolve detects a saved-search URL (no network)', async () => {
 test('ebay resolve detects an explicit search: URL (no network)', async () => {
   const r = await ebayAdapter.resolve('search:charizard ex sealed', ctx);
   assert.equal(r.productId, 'search:charizard ex sealed');
+});
+
+test('target resolve detects a discovery directive (no network)', async () => {
+  const r = await targetAdapter.resolve('discover:keyword:pokemon', ctx);
+  assert.equal(r.productId, 'discover:keyword:pokemon');
+});
+
+test('pokemon center resolve detects a discovery directive (no network)', async () => {
+  const r = await pokemonCenterAdapter.resolve('discover:sitemap', ctx);
+  assert.equal(r.productId, 'discover:sitemap');
 });

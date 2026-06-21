@@ -11,6 +11,17 @@ import type { Watch, AdapterType } from '../db/types.js';
 
 export type StockConfidence = 'exact' | 'inferred' | 'queue_gated' | 'unknown';
 
+/**
+ * Marker prefix for a catalog-discovery watch. Its `product_id` is
+ * `discover:<directive>` (e.g. `discover:category:abc`), which the engine routes
+ * to the adapter's `discover()` instead of the normal stock `check()`.
+ */
+export const DISCOVER_PREFIX = 'discover:';
+
+export function isDiscoverDirective(s: string): boolean {
+  return s.startsWith(DISCOVER_PREFIX);
+}
+
 export interface AdapterCapabilities {
   /** Adapter can report an exact remaining quantity. */
   exactStockQty: boolean;
@@ -52,6 +63,18 @@ export interface ResolveResult {
   image?: string;
 }
 
+/**
+ * A product surfaced by catalog discovery (a "new-product watcher" source).
+ * The engine diffs these against existing watches to spot brand-new SKUs.
+ */
+export interface DiscoveredProduct {
+  productId: string;
+  name: string;
+  url: string;
+  image?: string | null;
+  price?: number | null;
+}
+
 /** Shared services handed to every adapter call. */
 export interface AdapterContext {
   http: HttpClient;
@@ -72,6 +95,14 @@ export interface RetailerAdapter {
 
   /** The hot path. Called every poll cycle. */
   check(watch: Watch, ctx: AdapterContext): Promise<CheckResult>;
+
+  /**
+   * Optional catalog discovery (PRD §21 stretch: pre-drop visibility). Given a
+   * discovery watch (`product_id` like `discover:<directive>`), return the
+   * current set of products in that listing/category/sitemap. The engine diffs
+   * the result against existing watches and surfaces brand-new SKUs. Read-only.
+   */
+  discover?(watch: Watch, ctx: AdapterContext): Promise<DiscoveredProduct[]>;
 }
 
 /** Helper for adapters to return a uniform error CheckResult. */

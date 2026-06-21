@@ -5,13 +5,14 @@ import { Limiter } from '../lib/pool.js';
 import { retailers as retailerRepo, watches as watchRepo, alerts as alertRepo } from '../db/repositories.js';
 import { getAdapter } from '../adapters/registry.js';
 import { buildAdapterContext } from '../adapters/context.js';
+import { isDiscoverDirective } from '../adapters/types.js';
 import { decide } from './stateMachine.js';
 import { CircuitBreaker } from './circuitBreaker.js';
 import { OpsReporter } from './ops.js';
 import { Dispatcher } from '../dispatcher/dispatcher.js';
 import { MarketPriceService } from '../market/marketPrice.js';
 import { DiscordRest } from '../lib/discordRest.js';
-import type { AdapterContext, CheckResult } from '../adapters/types.js';
+import type { AdapterContext, CheckResult, DiscoveredProduct } from '../adapters/types.js';
 import type { Retailer, Watch } from '../db/types.js';
 
 /**
@@ -203,8 +204,11 @@ export class Engine {
         continue;
       }
       ws.inFlight = true;
+      const task: () => Promise<unknown> = isDiscoverDirective(watch.product_id)
+        ? () => this.pollDiscovery(watch, runtime)
+        : () => this.pollWatch(watch, runtime);
       void runtime.limiter
-        .run(() => this.pollWatch(watch, runtime))
+        .run(task)
         .catch((err) =>
           this.logger.error('poll failed', { watchId, error: (err as Error).message }),
         )
@@ -340,6 +344,111 @@ export class Engine {
     } else if (ws.hot) {
       intervalSec = Math.max(10, Math.floor(ws.intervalSec / 2)); // hot drop -> tighten
     }
+    const jitter = 1 + (Math.random() * 2 - 1) * cfg.engine.jitterPct;
+    ws.nextDue = Date.now() + intervalSec * 1000 * jitter;
+  }
+
+  // --- Catalog discovery (new-product watcher, PRD §21 stretch) --------------
+
+  /**
+   * Poll a discovery watch: scan the retailer's catalog/sitemap, diff against
+   * existing watches, create paused watches for brand-new SKUs, and (after the
+   * first seeding pass) announce them. Best-effort and read-only.
+   */
+  private async pollDiscovery(watch: Watch, runtime: RetailerRuntime): Promise<void> {
+    const adapter = getAdapter(runtime.retailer.adapter_type);
+    const ws = this.watchState.get(watch.id);
+    const log = this.logger.child({ watchId: watch.id, retailer: runtime.retailer.name });
+
+    if (!adapter.discover) {
+      log.warn('discovery watch on an adapter without discover()', {
+        adapter: runtime.retailer.adapter_type,
+      });
+      await this.markDiscoveryChecked(watch);
+      if (ws) this.rescheduleDiscovery(ws, watch);
+      return;
+    }
+
+    const firstRun = !watch.last_checked;
+    let products: DiscoveredProduct[];
+    try {
+      products = await adapter.discover(watch, runtime.ctx);
+    } catch (err) {
+      // Best-effort (e.g. Cloudflare 403 on PC without a proxy): log and back off
+      // without tripping the stock circuit breaker or spamming #ops.
+      log.warn('discovery failed', { error: (err as Error).message });
+      await this.markDiscoveryChecked(watch);
+      if (ws) this.rescheduleDiscovery(ws, watch, true);
+      return;
+    }
+
+    // Existing watches under this retailer are the "already seen" set.
+    const existing = await watchRepo.listByRetailer(runtime.retailer.id);
+    const seen = new Set(existing.map((w) => w.product_id));
+    const fresh = products.filter((p) => !seen.has(p.productId)).slice(0, 100);
+
+    const created: DiscoveredProduct[] = [];
+    for (const p of fresh) {
+      try {
+        await watchRepo.create({
+          retailer_id: runtime.retailer.id,
+          product_id: p.productId,
+          source_url: p.url,
+          display_name: p.name,
+          image_url: p.image ?? null,
+          enabled: false, // paused — the user resumes the ones they want
+        });
+        created.push(p);
+      } catch (err) {
+        // Likely a unique-constraint race; skip and continue.
+        log.debug('discovery create skipped', {
+          productId: p.productId,
+          error: (err as Error).message,
+        });
+      }
+    }
+
+    log.info('discovery scan', { found: products.length, new: created.length, seeded: firstRun });
+
+    // The first pass only seeds the seen-set silently; later passes announce.
+    if (!firstRun && created.length > 0) {
+      await this.announceNewProducts(runtime.retailer, created);
+    }
+
+    await this.markDiscoveryChecked(watch);
+    if (ws) this.rescheduleDiscovery(ws, watch);
+  }
+
+  private async announceNewProducts(retailer: Retailer, items: DiscoveredProduct[]): Promise<void> {
+    if (!retailer.webhook_url) {
+      this.logger.warn('no webhook for discovery alert', { retailer: retailer.name });
+      return;
+    }
+    const n = items.length;
+    const head = `🆕 ${n} new ${retailer.name} ${n === 1 ? 'product' : 'products'} — added to your watch list (paused). Resume the ones you want:`;
+    const lines = items.slice(0, 10).map((p) => `• ${p.name} — ${p.url}`);
+    if (n > 10) lines.push(`…and ${n - 10} more.`);
+    const content = [head, ...lines].join('\n').slice(0, 1900);
+    await this.dispatcher
+      .postWebhook(retailer.webhook_url, { content })
+      .catch((err) => this.logger.warn('discovery alert post failed', { error: (err as Error).message }));
+  }
+
+  private async markDiscoveryChecked(watch: Watch): Promise<void> {
+    const now = new Date().toISOString();
+    await watchRepo
+      .recordCheck(watch.id, { last_status: 'unknown', last_price: null, last_checked: now })
+      .catch((err) =>
+        this.logger.warn('discovery recordCheck failed', { error: (err as Error).message }),
+      );
+    const cached = this.watchById.get(watch.id);
+    if (cached) cached.last_checked = now;
+  }
+
+  private rescheduleDiscovery(ws: WatchRuntime, _watch: Watch, backoff = false): void {
+    const base = Math.max(ws.intervalSec, 300); // scan gently — at least every 5 min
+    const intervalSec = backoff ? Math.min(base * 2, 1800) : base;
+    const cfg = loadConfig();
     const jitter = 1 + (Math.random() * 2 - 1) * cfg.engine.jitterPct;
     ws.nextDue = Date.now() + intervalSec * 1000 * jitter;
   }

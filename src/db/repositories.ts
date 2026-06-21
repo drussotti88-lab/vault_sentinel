@@ -135,21 +135,21 @@ export const watches = {
     threshold?: number | null;
     tcg_sku?: string | null;
     interval_sec?: number | null;
+    enabled?: boolean;
   }): Promise<Watch> {
-    const { data, error } = await getSupabase()
-      .from('watches')
-      .insert({
-        retailer_id: input.retailer_id,
-        product_id: input.product_id,
-        source_url: input.source_url,
-        display_name: input.display_name ?? null,
-        image_url: input.image_url ?? null,
-        threshold: input.threshold ?? null,
-        tcg_sku: input.tcg_sku ?? null,
-        interval_sec: input.interval_sec ?? null,
-      })
-      .select('*')
-      .single();
+    const row: Record<string, unknown> = {
+      retailer_id: input.retailer_id,
+      product_id: input.product_id,
+      source_url: input.source_url,
+      display_name: input.display_name ?? null,
+      image_url: input.image_url ?? null,
+      threshold: input.threshold ?? null,
+      tcg_sku: input.tcg_sku ?? null,
+      interval_sec: input.interval_sec ?? null,
+    };
+    // Discovery creates items paused; normal adds default to enabled (schema default).
+    if (input.enabled !== undefined) row.enabled = input.enabled;
+    const { data, error } = await getSupabase().from('watches').insert(row).select('*').single();
     return unwrap(data as Watch, error);
   },
 
