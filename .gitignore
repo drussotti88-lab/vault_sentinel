@@ -6,6 +6,8 @@ dashboard/node_modules/
 dist/
 dashboard/.next/
 dashboard/out/
+dashboard/next-env.d.ts
+*.tsbuildinfo
 
 # Secrets / local env (PRD §20 — secrets live only in the host environment)
 .env
