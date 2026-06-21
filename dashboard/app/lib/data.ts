@@ -26,6 +26,7 @@ export interface WatchView {
   product_id: string;
   source_url: string;
   threshold: number | null;
+  interval_sec: number | null;
   last_status: string;
   last_price: number | null;
   last_checked: string | null;
@@ -68,7 +69,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     supabase
       .from('watches')
       .select(
-        'id,retailer_id,display_name,product_id,source_url,threshold,last_status,last_price,last_checked,enabled',
+        'id,retailer_id,display_name,product_id,source_url,threshold,interval_sec,last_status,last_price,last_checked,enabled',
       ),
     supabase
       .from('alerts')
