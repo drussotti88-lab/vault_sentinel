@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Build output
+dist/
+dashboard/.next/
+dashboard/out/
+
+# Secrets / local env (PRD §20 — secrets live only in the host environment)
+.env
+.env.*
+!.env.example
+dashboard/.env
+dashboard/.env.*
+!dashboard/.env.example
+
+# Logs / OS cruft
+*.log
+npm-debug.log*
+.DS_Store
