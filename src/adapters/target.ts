@@ -1,0 +1,199 @@
+import type { RetailerAdapter, CheckResult, AdapterContext, ResolveResult } from './types.js';
+import { errorResult } from './types.js';
+import { browserHeaders } from '../lib/userAgents.js';
+import { HttpError } from '../lib/http.js';
+import type { Watch } from '../db/types.js';
+
+/**
+ * Target — reliability: HIGH (PRD §11.1).
+ *
+ * Method: Target's internal RedSky data service (redsky.target.com), the same
+ * JSON backend the site's own frontend calls. No HTML scraping.
+ * Identifier: `tcin`, resolved from the product URL.
+ * Stock signal: fulfillment endpoint returns structured availability =>
+ *   confidence "exact". Quick links: add-to-cart deep link via cart URL.
+ *
+ * Config (retailer.config):
+ *   apiKey  — RedSky web API key (the key Target's frontend embeds)
+ *   storeId — preferred store id for store-level availability
+ *   zip     — optional zip for location-scoped fulfillment
+ */
+
+const REDSKY_BASE = 'https://redsky.target.com/redsky_aggregations/v1/web';
+
+function tcinFromUrl(url: string): string | null {
+  // .../p/<slug>/-/A-91234567  (also tolerates a bare numeric id)
+  const m = url.match(/\/A-(\d+)/i) ?? url.match(/(?:^|\/)(\d{6,})(?:\?|$)/);
+  return m?.[1] ?? null;
+}
+
+interface RedskyConfig {
+  apiKey: string;
+  storeId: string;
+  zip?: string;
+}
+
+function readConfig(ctx: AdapterContext): RedskyConfig {
+  const apiKey = String(ctx.config.apiKey ?? '');
+  const storeId = String(ctx.config.storeId ?? '');
+  if (!apiKey) throw new Error('Target adapter requires config.apiKey (RedSky web key)');
+  const cfg: RedskyConfig = { apiKey, storeId };
+  if (typeof ctx.config.zip === 'string') cfg.zip = ctx.config.zip;
+  return cfg;
+}
+
+function addToCartUrl(tcin: string): string {
+  return `https://www.target.com/co-cart?tcin=${tcin}&qty=1`;
+}
+
+export const targetAdapter: RetailerAdapter = {
+  type: 'target',
+  capabilities: {
+    exactStockQty: true,
+    addToCartDeepLink: true,
+    requiresProxy: false,
+    queueAware: false,
+    marketPriceMapping: true,
+  },
+
+  async resolve(url: string, ctx: AdapterContext): Promise<ResolveResult> {
+    const tcin = tcinFromUrl(url);
+    if (!tcin) throw new Error(`Could not extract a tcin from URL: ${url}`);
+
+    const cfg = readConfig(ctx);
+    await ctx.rateLimiter.acquire();
+    const ua = ctx.userAgent();
+    const endpoint =
+      `${REDSKY_BASE}/pdp_client_v1?key=${encodeURIComponent(cfg.apiKey)}` +
+      `&tcin=${tcin}&store_id=${encodeURIComponent(cfg.storeId)}&pricing_store_id=${encodeURIComponent(cfg.storeId)}`;
+
+    const res = await ctx.http.get(endpoint, { headers: browserHeaders(ua) });
+    const body = res.json<RedskyPdpResponse>();
+    const item = body?.data?.product?.item;
+    const name = item?.product_description?.title;
+    const image = item?.enrichment?.images?.primary_image_url ?? undefined;
+
+    const result: ResolveResult = { productId: tcin };
+    if (name) result.displayName = decodeEntities(name);
+    if (image) result.image = image;
+    return result;
+  },
+
+  async check(watch: Watch, ctx: AdapterContext): Promise<CheckResult> {
+    const tcin = watch.product_id;
+    let cfg: RedskyConfig;
+    try {
+      cfg = readConfig(ctx);
+    } catch (err) {
+      return errorResult(watch.source_url, 'config', (err as Error).message, false);
+    }
+
+    await ctx.rateLimiter.acquire();
+    const ua = ctx.userAgent();
+    const headers = browserHeaders(ua);
+
+    try {
+      // Product detail (name, price, image) + fulfillment (availability) in parallel.
+      const pdpUrl =
+        `${REDSKY_BASE}/pdp_client_v1?key=${encodeURIComponent(cfg.apiKey)}` +
+        `&tcin=${tcin}&store_id=${encodeURIComponent(cfg.storeId)}&pricing_store_id=${encodeURIComponent(cfg.storeId)}`;
+      const fulfillUrl =
+        `${REDSKY_BASE}/pdp_fulfillment_v1?key=${encodeURIComponent(cfg.apiKey)}` +
+        `&tcin=${tcin}&store_id=${encodeURIComponent(cfg.storeId)}&pricing_store_id=${encodeURIComponent(cfg.storeId)}` +
+        (cfg.zip ? `&zip=${encodeURIComponent(cfg.zip)}` : '');
+
+      const [pdpRes, fulfillRes] = await Promise.all([
+        ctx.http.get(pdpUrl, { headers }),
+        ctx.http.get(fulfillUrl, { headers }),
+      ]);
+
+      const pdp = pdpRes.json<RedskyPdpResponse>();
+      const fulfill = fulfillRes.json<RedskyFulfillResponse>();
+
+      const item = pdp?.data?.product?.item;
+      const priceBlock = pdp?.data?.product?.price;
+      const name = decodeEntities(item?.product_description?.title ?? watch.display_name ?? '');
+      const image =
+        item?.enrichment?.images?.primary_image_url ?? watch.image_url ?? null;
+      const price =
+        priceBlock?.current_retail ??
+        priceBlock?.formatted_current_price_num ??
+        null;
+
+      const fulfillment = fulfill?.data?.product?.fulfillment;
+      const shipping = fulfillment?.shipping_options;
+      const network = fulfillment?.scheduled_delivery;
+
+      // Online availability is the primary signal; store pickup as secondary.
+      const shipStatus = shipping?.availability_status;
+      const availableToShip = shipStatus === 'IN_STOCK' || shipStatus === 'LIMITED_STOCK';
+      const qty = shipping?.available_to_promise_quantity ?? null;
+
+      const inStock = availableToShip || network?.availability_status === 'IN_STOCK';
+
+      return {
+        inStock,
+        confidence: 'exact',
+        price: typeof price === 'number' ? price : null,
+        currency: 'USD',
+        name,
+        image,
+        url: watch.source_url,
+        addToCartUrl: addToCartUrl(tcin),
+        stockQty: typeof qty === 'number' ? qty : null,
+        queue: null,
+        raw: { shipStatus, qty },
+      };
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return errorResult(
+          watch.source_url,
+          `http_${err.status}`,
+          err.message,
+          err.retryable,
+        );
+      }
+      return errorResult(watch.source_url, 'unknown', (err as Error).message, true);
+    }
+  },
+};
+
+// --- Minimal typings for the RedSky payloads we read (defensive/optional). ---
+
+interface RedskyPdpResponse {
+  data?: {
+    product?: {
+      item?: {
+        product_description?: { title?: string };
+        enrichment?: { images?: { primary_image_url?: string } };
+      };
+      price?: {
+        current_retail?: number;
+        formatted_current_price_num?: number;
+      };
+    };
+  };
+}
+
+interface RedskyFulfillResponse {
+  data?: {
+    product?: {
+      fulfillment?: {
+        shipping_options?: {
+          availability_status?: string;
+          available_to_promise_quantity?: number;
+        };
+        scheduled_delivery?: { availability_status?: string };
+      };
+    };
+  };
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
