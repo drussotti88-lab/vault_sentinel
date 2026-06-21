@@ -5,7 +5,7 @@
   "description": "Stock Checkers (codename Sentinel) — self-hosted Discord stock-alert system",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -1,5 +1,8 @@
 # Persistent worker (engine + bot). PRD §21: long-running process, not cron.
-FROM node:20-slim
+# Node 22+ ships a native global WebSocket, which @supabase/supabase-js's
+# realtime client requires; on Node 20 it throws at startup ("Node.js 20
+# detected without native WebSocket support").
+FROM node:22-slim
 
 WORKDIR /app
 
