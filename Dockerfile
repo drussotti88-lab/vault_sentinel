@@ -19,5 +19,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 ENV NODE_ENV=production
+# The control API listens on $PORT (the platform injects it; defaults to 8080).
+EXPOSE 8080
 # The worker runs forever and self-restarts via the platform on crash.
 CMD ["node", "dist/index.js"]

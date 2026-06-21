@@ -57,6 +57,24 @@ fly logs
 - **Health**: the worker posts a heartbeat to `#ops`; `/status` shows per-adapter
   state from Discord.
 
+## Web control API (optional — powers the dashboard's watch-list controls)
+
+The worker exposes a small HTTP API so the read-only dashboard can *manage the
+watch list* (add / remove / pause / resume items, adjust threshold + interval)
+without re-implementing adapter logic. It reuses the same actions as the slash
+commands, so both surfaces behave identically.
+
+- It listens on `$PORT` (the host injects this; defaults to `8080`).
+- Every `/api/*` call requires `Authorization: Bearer $CONTROL_API_TOKEN`.
+  Until `CONTROL_API_TOKEN` is set, `/api/*` returns `503` — so it's safe to
+  deploy before wiring the dashboard. `GET /health` is always open.
+- The dashboard calls this API **server-side only**, so the token never reaches
+  a browser and there's no CORS surface (PRD §20).
+
+To enable it: set `CONTROL_API_TOKEN` (a long random secret) on the worker and
+expose the worker's public URL (Fly: an `[http_service]`; Railway: the service's
+"Generate Domain" toggle). Point the dashboard's `CONTROL_API_URL` at that URL.
+
 ## Cost note (be honest with yourself)
 
 Fly's old always-free allowance has thinned over time; a single always-on
