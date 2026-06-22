@@ -8,6 +8,7 @@ import { createLogger } from '../lib/logger.js';
 import { retailers as retailerRepo, watches as watchRepo } from '../db/repositories.js';
 import { listAdapterTypes } from '../adapters/registry.js';
 import { DiscordRest } from '../lib/discordRest.js';
+import { Dispatcher } from '../dispatcher/dispatcher.js';
 import * as actions from '../service/watchActions.js';
 import type { AdapterType } from '../db/types.js';
 import type { Engine } from '../core/engine.js';
@@ -129,6 +130,12 @@ export const commandDefinitions = [
     .setDescription("Show a retailer's config (secrets masked)")
     .addStringOption((o) => o.setName('retailer').setDescription('Retailer name').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('test-alert')
+    .setDescription('Post a test alert to a retailer channel to verify delivery')
+    .addStringOption((o) => o.setName('retailer').setDescription('Retailer name').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ].map((b) => b.toJSON());
 
 // ---------------------------------------------------------------------------
@@ -163,6 +170,8 @@ export async function handleInteraction(
         return await setRetailerConfig(interaction);
       case 'get-retailer-config':
         return await getRetailerConfig(interaction);
+      case 'test-alert':
+        return await testAlert(interaction);
       default:
         await interaction.reply({ content: 'Unknown command.', ephemeral: true });
     }
@@ -362,6 +371,24 @@ async function getRetailerConfig(interaction: ChatInputCommandInteraction): Prom
   }
   const lines = keys.map((k) => `\`${k}\`: ${maskConfigValue(k, retailer.config[k])}`);
   await interaction.editReply([`**${retailer.name}** config:`, ...lines].join('\n').slice(0, 1900));
+}
+
+async function testAlert(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+  const name = interaction.options.getString('retailer', true);
+  const retailer = await retailerRepo.getByName(name);
+  if (!retailer) throw new Error(`No retailer named "${name}".`);
+  if (!retailer.webhook_url) {
+    throw new Error(`**${retailer.name}** has no webhook configured — re-run /add-retailer or rebind it.`);
+  }
+  const dispatcher = new Dispatcher({ logger });
+  await dispatcher.postWebhook(retailer.webhook_url, {
+    content:
+      `✅ **Sentinel test alert** for **${retailer.name}**.\n` +
+      `If you can see this message in this channel, your alert delivery works end-to-end ` +
+      `(webhook + permissions). This is a manual test — not a real restock.`,
+  });
+  await interaction.editReply(`Posted a test alert to <#${retailer.channel_id}>. Check that channel.`);
 }
 
 /** Mask secret-looking values so /get-retailer-config doesn't echo full keys. */
