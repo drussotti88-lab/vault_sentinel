@@ -28,14 +28,21 @@ import type { Watch } from '../db/types.js';
 const REDSKY_BASE = 'https://redsky.target.com/redsky_aggregations/v1/web';
 
 /**
- * RedSky's edge (Akamai) commonly 403s requests that don't look like they came
- * from target.com — so pair the browser UA with an Origin/Referer of the site.
+ * RedSky's edge (Akamai) commonly 403s requests that don't look like a real
+ * browser XHR from target.com — so pair the browser UA with an Origin/Referer
+ * of the site plus the modern client-hint + fetch-metadata headers Chrome sends.
  */
 function redskyHeaders(ua: string): Record<string, string> {
   return {
     ...browserHeaders(ua),
     Origin: 'https://www.target.com',
     Referer: 'https://www.target.com/',
+    'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-site',
   };
 }
 
