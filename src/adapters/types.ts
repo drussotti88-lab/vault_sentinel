@@ -22,6 +22,27 @@ export function isDiscoverDirective(s: string): boolean {
   return s.startsWith(DISCOVER_PREFIX);
 }
 
+/**
+ * Parse a discovery product_id into its adapter directive and an optional
+ * keyword filter. Syntax: `discover:<directive>~kw1,kw2,...` — e.g.
+ * `discover:sitemap~booster,elite trainer,tin`. The engine applies the filters
+ * (case-insensitive substring match on a product's name/url) so a catalog scan
+ * can be narrowed to, say, TCG products only.
+ */
+export function parseDiscover(productId: string): { directive: string; filters: string[] } {
+  const raw = productId.startsWith(DISCOVER_PREFIX)
+    ? productId.slice(DISCOVER_PREFIX.length)
+    : productId;
+  const i = raw.indexOf('~');
+  if (i === -1) return { directive: raw.trim(), filters: [] };
+  const filters = raw
+    .slice(i + 1)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return { directive: raw.slice(0, i).trim(), filters };
+}
+
 export interface AdapterCapabilities {
   /** Adapter can report an exact remaining quantity. */
   exactStockQty: boolean;

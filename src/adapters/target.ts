@@ -5,7 +5,7 @@ import type {
   ResolveResult,
   DiscoveredProduct,
 } from './types.js';
-import { errorResult, DISCOVER_PREFIX, isDiscoverDirective } from './types.js';
+import { errorResult, DISCOVER_PREFIX, isDiscoverDirective, parseDiscover } from './types.js';
 import { browserHeaders } from '../lib/userAgents.js';
 import { HttpError } from '../lib/http.js';
 import type { Watch } from '../db/types.js';
@@ -196,7 +196,7 @@ export const targetAdapter: RetailerAdapter = {
    */
   async discover(watch: Watch, ctx: AdapterContext): Promise<DiscoveredProduct[]> {
     const cfg = readConfig(ctx); // throws a clear error if apiKey is missing
-    const directive = watch.product_id.slice(DISCOVER_PREFIX.length);
+    const { directive } = parseDiscover(watch.product_id);
     const sep = directive.indexOf(':');
     const kind = sep === -1 ? directive : directive.slice(0, sep);
     const value = sep === -1 ? '' : directive.slice(sep + 1);

@@ -5,7 +5,7 @@ import { Limiter } from '../lib/pool.js';
 import { retailers as retailerRepo, watches as watchRepo, alerts as alertRepo } from '../db/repositories.js';
 import { getAdapter } from '../adapters/registry.js';
 import { buildAdapterContext } from '../adapters/context.js';
-import { isDiscoverDirective } from '../adapters/types.js';
+import { isDiscoverDirective, parseDiscover } from '../adapters/types.js';
 import { decide } from './stateMachine.js';
 import { CircuitBreaker } from './circuitBreaker.js';
 import { OpsReporter } from './ops.js';
@@ -382,10 +382,20 @@ export class Engine {
       return;
     }
 
+    // Optional keyword filter (e.g. `discover:sitemap~booster,elite trainer`) so a
+    // broad catalog scan can be narrowed to, say, TCG products only.
+    const { filters } = parseDiscover(watch.product_id);
+    const matched = filters.length
+      ? products.filter((p) => {
+          const hay = `${p.name} ${p.url}`.toLowerCase();
+          return filters.some((f) => hay.includes(f));
+        })
+      : products;
+
     // Existing watches under this retailer are the "already seen" set.
     const existing = await watchRepo.listByRetailer(runtime.retailer.id);
     const seen = new Set(existing.map((w) => w.product_id));
-    const fresh = products.filter((p) => !seen.has(p.productId)).slice(0, 100);
+    const fresh = matched.filter((p) => !seen.has(p.productId)).slice(0, 100);
 
     const created: DiscoveredProduct[] = [];
     for (const p of fresh) {
@@ -408,7 +418,12 @@ export class Engine {
       }
     }
 
-    log.info('discovery scan', { found: products.length, new: created.length, seeded: firstRun });
+    log.info('discovery scan', {
+      found: products.length,
+      matched: matched.length,
+      new: created.length,
+      seeded: firstRun,
+    });
 
     // The first pass only seeds the seen-set silently; later passes announce.
     if (!firstRun && created.length > 0) {
