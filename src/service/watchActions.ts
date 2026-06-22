@@ -48,12 +48,23 @@ export async function addItem(input: AddItemInput): Promise<Watch> {
 
 /** Accept a full id or a short 8-char prefix (as shown in list output). */
 export async function resolveWatchId(idPrefix: string): Promise<string> {
-  const direct = await watchRepo.get(idPrefix);
-  if (direct) return direct.id;
+  // Only query the UUID column directly when given a full UUID — a short prefix
+  // (e.g. "e90cc922") can't be cast to uuid and would error, so match it against
+  // the full list instead.
+  const isFullUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    idPrefix,
+  );
+  if (isFullUuid) {
+    const direct = await watchRepo.get(idPrefix);
+    if (direct) return direct.id;
+  }
   const all = await watchRepo.listAll();
-  const match = all.find((w) => w.id.startsWith(idPrefix));
-  if (!match) throw new Error(`No watch matching id "${idPrefix}".`);
-  return match.id;
+  const matches = all.filter((w) => w.id.startsWith(idPrefix));
+  if (matches.length === 0) throw new Error(`No watch matching id "${idPrefix}".`);
+  if (matches.length > 1) {
+    throw new Error(`"${idPrefix}" matches ${matches.length} watches — use more characters.`);
+  }
+  return matches[0]!.id;
 }
 
 export async function removeItem(idPrefix: string): Promise<string> {
