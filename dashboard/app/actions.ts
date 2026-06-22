@@ -96,3 +96,44 @@ export async function setIntervalAction(id: string, interval: number): Promise<A
     return fail(err);
   }
 }
+
+// --- Bulk actions (multi-select) -------------------------------------------
+
+export async function bulkSetEnabledAction(ids: string[], enabled: boolean): Promise<ActionResult> {
+  try {
+    await assertAuthed();
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await (enabled ? controlApi.resume(id) : controlApi.pause(id));
+      } catch {
+        failed++;
+      }
+    }
+    revalidatePath('/');
+    const verb = enabled ? 'Resumed' : 'Paused';
+    if (failed > 0) return { ok: false, error: `${verb} ${ids.length - failed}/${ids.length} — ${failed} failed.` };
+    return { ok: true, message: `${verb} ${ids.length} item${ids.length === 1 ? '' : 's'}.` };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function bulkRemoveAction(ids: string[]): Promise<ActionResult> {
+  try {
+    await assertAuthed();
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await controlApi.removeItem(id);
+      } catch {
+        failed++;
+      }
+    }
+    revalidatePath('/');
+    if (failed > 0) return { ok: false, error: `Removed ${ids.length - failed}/${ids.length} — ${failed} failed.` };
+    return { ok: true, message: `Removed ${ids.length} item${ids.length === 1 ? '' : 's'}.` };
+  } catch (err) {
+    return fail(err);
+  }
+}
