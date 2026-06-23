@@ -50,6 +50,25 @@ function readConfig(ctx: AdapterContext): PcConfig {
 }
 
 /**
+ * Browser-navigation header profile for fetching a product *page* (vs an XHR).
+ * Cloudflare is more likely to pass a request that looks like a real navigation.
+ */
+function pcPageHeaders(ua: string): Record<string, string> {
+  return {
+    ...browserHeaders(ua),
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'none',
+    'sec-fetch-user': '?1',
+    'Upgrade-Insecure-Requests': '1',
+  };
+}
+
+/**
  * Read-only queue detection. Hits a configured Queue-it status endpoint if
  * present; otherwise inspects whether the product URL is redirecting to a
  * waiting room. Never interacts with the queue beyond observing it.
@@ -77,7 +96,7 @@ async function detectQueue(
   // Heuristic: a request that lands on a queue-it host indicates an active room.
   try {
     const res = await ctx.http.get(url, {
-      headers: browserHeaders(ctx.userAgent()),
+      headers: pcPageHeaders(ctx.userAgent()),
       retries: 0,
     });
     const onQueue = /queue-it\.net|waiting.?room/i.test(res.text);
@@ -229,7 +248,7 @@ export const pokemonCenterAdapter: RetailerAdapter = {
  */
 async function probePcAvailability(watch: Watch, ctx: AdapterContext): Promise<void> {
   try {
-    const res = await ctx.http.get(watch.source_url, { headers: browserHeaders(ctx.userAgent()) });
+    const res = await ctx.http.get(watch.source_url, { headers: pcPageHeaders(ctx.userAgent()) });
     const html = res.text;
     const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
     const nd = m?.[1] ?? '';
