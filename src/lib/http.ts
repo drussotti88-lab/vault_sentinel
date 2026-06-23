@@ -144,11 +144,27 @@ export class HttpClient {
     if (!this.proxyUrl) return Promise.resolve(undefined);
     if (!this.dispatcherPromise) {
       const proxyUrl = this.proxyUrl;
+      // Validate early: a malformed value (e.g. a whole `curl ...` command pasted
+      // into PROXY_POOL_URL) must give a clear error, not silently go direct.
+      let parsed: URL | null = null;
+      try {
+        parsed = new URL(proxyUrl);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || !/^https?:$/.test(parsed.protocol)) {
+        this.logger?.error(
+          'invalid PROXY_POOL_URL — expected just http://user:pass@host:port (no "curl", no flags); going DIRECT',
+          { valuePreview: proxyUrl.slice(0, 24) },
+        );
+        this.dispatcherPromise = Promise.resolve(undefined);
+        return this.dispatcherPromise;
+      }
       this.dispatcherPromise = import('undici')
         .then((undici) => new undici.ProxyAgent(proxyUrl) as unknown)
-        .catch(() => {
-          this.logger?.warn('proxy configured but undici ProxyAgent unavailable; going direct', {
-            proxyUrl,
+        .catch((err) => {
+          this.logger?.error('failed to initialize proxy agent; going DIRECT', {
+            error: (err as Error).message,
           });
           return undefined;
         });
