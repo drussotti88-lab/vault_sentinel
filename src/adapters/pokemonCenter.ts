@@ -192,10 +192,10 @@ export const pokemonCenterAdapter: RetailerAdapter = {
     // config (no #ops spam, no circuit-breaker trips). Trade-off: no stock signal
     // while idle; set config.inventoryUrl (+ a proxy) to also detect in-stock.
     if (!cfg.inventoryUrl) {
-      // No inventory endpoint configured. Probe the product page (read-only) and
-      // log PC's real availability/price markup so the precise reader can be
-      // calibrated; for now still return a benign out (no false alerts).
-      await probePcAvailability(watch, ctx);
+      // Queue-only watch. PC's product page is Cloudflare-protected (403s even via
+      // a residential proxy with full browser headers), so there's no reliable
+      // read of idle stock here — stay quiet and return a benign out. Catalog
+      // discovery (the sitemap) is the durable PC signal; see README.
       return {
         inStock: false,
         confidence: 'inferred',
@@ -239,34 +239,6 @@ export const pokemonCenterAdapter: RetailerAdapter = {
     }
   },
 };
-
-/**
- * Diagnostic: fetch the product page (read-only, through any proxy) and log
- * Pokémon Center's real availability/price markup so the precise stock reader
- * can be calibrated from a real response. No behavior change — the caller still
- * returns a benign out. Temporary scaffolding.
- */
-async function probePcAvailability(watch: Watch, ctx: AdapterContext): Promise<void> {
-  try {
-    const res = await ctx.http.get(watch.source_url, { headers: pcPageHeaders(ctx.userAgent()) });
-    const html = res.text;
-    const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-    const nd = m?.[1] ?? '';
-    const around = (re: RegExp, before = 30, after = 180): string => {
-      const i = nd.search(re);
-      return i >= 0 ? nd.slice(Math.max(0, i - before), i + after) : '(not found)';
-    };
-    ctx.logger.info('pc availability probe', {
-      productId: watch.product_id,
-      pageLen: html.length,
-      nextDataLen: nd.length,
-      availabilitySnippet: around(/"availability"|"state"\s*:|availab/i),
-      priceSnippet: around(/"price"|"amount"|"listPrice"|"purchasePrice"/i),
-    });
-  } catch (err) {
-    ctx.logger.warn('pc availability probe failed', { error: (err as Error).message });
-  }
-}
 
 interface PcInventoryResponse {
   available?: boolean;
