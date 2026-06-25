@@ -127,6 +127,25 @@ export function Options() {
       </section>
 
       <section className="section">
+        <h2>Drop queue detector</h2>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings.queueDetectorEnabled}
+            onChange={(e) => void update({ queueDetectorEnabled: e.target.checked })}
+          />
+          <span>Alert me the instant a drop puts me in a Queue-it waiting room</span>
+        </label>
+        <p className="hint">
+          Watches for <strong>Queue-it</strong> waiting rooms on Pokémon Center, Walmart, and Target.
+          The moment a drop bounces your browser into a queue you get a notification (and a Discord
+          ping, if set) — and again when you clear the line. It only tells you the queue is
+          happening; it never bypasses, skips, or automates it. These alerts ignore quiet hours
+          since a live drop is time-critical. Turn this off to silence them.
+        </p>
+      </section>
+
+      <section className="section">
         <h2>Quiet hours</h2>
         <label className="toggle">
           <input

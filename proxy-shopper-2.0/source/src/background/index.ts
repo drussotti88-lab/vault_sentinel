@@ -17,6 +17,9 @@ const QUEUE_DEDUPE_MS = 90_000;
 async function handleQueueEvent(
   message: Extract<BackgroundMessage, { type: "QUEUE_EVENT" }>,
 ): Promise<void> {
+  const settings = await getSettings();
+  if (!settings.queueDetectorEnabled) return;
+
   const dedupeId = `${message.phase}|${message.host}`;
   const store = await chrome.storage.local.get(QUEUE_DEDUPE_KEY);
   const last = (store[QUEUE_DEDUPE_KEY] as Record<string, number> | undefined) ?? {};
@@ -30,7 +33,6 @@ async function handleQueueEvent(
   last[dedupeId] = now;
   await chrome.storage.local.set({ [QUEUE_DEDUPE_KEY]: last });
 
-  const settings = await getSettings();
   await showQueueAlert(
     {
       phase: message.phase,
