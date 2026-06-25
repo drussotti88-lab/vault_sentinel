@@ -5,7 +5,12 @@
   "description": "Watches products for you, alerts you when price or stock conditions are met, and assists you through the purchase.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "alarms", "notifications", "offscreen", "sidePanel", "tabs", "scripting"],
-  "host_permissions": ["https://www.target.com/*", "https://redsky.target.com/*"],
+  "host_permissions": [
+    "https://www.target.com/*",
+    "https://redsky.target.com/*",
+    "https://www.pokemoncenter.com/*",
+    "https://discord.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -31,7 +36,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.target.com/*"],
+      "matches": ["https://www.target.com/*", "https://www.pokemoncenter.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

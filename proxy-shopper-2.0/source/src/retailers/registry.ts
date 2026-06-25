@@ -1,11 +1,12 @@
 import type { RetailerAdapter } from "./RetailerAdapter";
 import { targetAdapter } from "./target/targetAdapter";
+import { pokemonCenterAdapter } from "./pokemonCenter/pokemonCenterAdapter";
 
 /**
  * Central adapter registry. To support a new retailer, implement
  * RetailerAdapter and add the instance here — nothing else changes.
  */
-const adapters: RetailerAdapter[] = [targetAdapter];
+const adapters: RetailerAdapter[] = [targetAdapter, pokemonCenterAdapter];
 
 export function getAllAdapters(): RetailerAdapter[] {
   return adapters;
