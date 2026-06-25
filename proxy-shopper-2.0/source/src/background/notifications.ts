@@ -79,7 +79,30 @@ export function evaluateAlert(
   return undefined;
 }
 
-/** Show a browser notification for a product, unless quiet hours apply. */
+/** Mirror an alert to a Discord channel via webhook, if one is configured. */
+async function postToDiscord(
+  product: WatchedProduct,
+  alert: Alert,
+  settings: UserSettings,
+): Promise<void> {
+  const webhook = settings.discordWebhookUrl?.trim();
+  if (!webhook || !webhook.startsWith("https://")) return;
+
+  const url = product.lastKnownUrl ?? getAdapterById(product.retailerId)?.buildProductUrl(product.productId);
+  const body = `**${alert.title}**\n${alert.message}${url ? `\n${url}` : ""}`;
+  try {
+    await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: body }),
+    });
+  } catch {
+    /* Webhook unreachable — the browser notification still fired. */
+  }
+}
+
+/** Show a browser notification for a product, unless quiet hours apply. Also
+ * mirrors the alert to Discord when a webhook is configured. */
 export async function showAlert(
   product: WatchedProduct,
   alert: Alert,
@@ -96,6 +119,8 @@ export async function showAlert(
     priority: 2,
     buttons: [{ title: "Open product" }],
   });
+
+  await postToDiscord(product, alert, settings);
 }
 
 /** Recover the watched-product id from a notification id, if it is ours. */

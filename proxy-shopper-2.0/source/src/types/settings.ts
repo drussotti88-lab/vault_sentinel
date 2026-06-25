@@ -29,6 +29,13 @@ export interface UserSettings {
    * The final order-submitting button is never clicked automatically.
    */
   assistAutoAdvanceCheckout: boolean;
+
+  /**
+   * Optional Discord webhook URL. When set, every alert that fires is also
+   * posted to this Discord channel (in addition to the browser notification),
+   * so alerts reach you wherever you watch Discord.
+   */
+  discordWebhookUrl?: string;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -43,4 +50,5 @@ export const DEFAULT_SETTINGS: UserSettings = {
   assistAutoOpenTab: false,
   assistAutoAddToCart: false,
   assistAutoAdvanceCheckout: false,
+  discordWebhookUrl: "",
 };

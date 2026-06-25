@@ -110,6 +110,20 @@ export function Options() {
           />
           <span>Restock &amp; availability alerts</span>
         </label>
+        <label className="field">
+          <span>Discord webhook URL (optional)</span>
+          <input
+            type="url"
+            placeholder="https://discord.com/api/webhooks/…"
+            value={settings.discordWebhookUrl ?? ""}
+            onChange={(e) => void update({ discordWebhookUrl: e.target.value.trim() })}
+          />
+        </label>
+        <p className="hint">
+          When set, every alert is also posted to this Discord channel (alongside the browser
+          notification). Create one in Discord under <strong>Channel → Integrations → Webhooks</strong>.
+          Leave blank to disable.
+        </p>
       </section>
 
       <section className="section">
