@@ -154,7 +154,13 @@ export interface QueueAlert {
 /** Best-effort friendly label for where the queue belongs. */
 function queueLabel(event: QueueAlert): string {
   if (event.retailerName) return event.retailerName;
-  const sub = event.host.split(".")[0];
+  // Works for both a queue-it subdomain (walmart.queue-it.net) and a retailer
+  // host (www.walmart.com) by matching on a known substring either way.
+  const host = event.host.replace(/^www\./, "");
+  if (host.includes("pokemoncenter")) return "Pokémon Center";
+  if (host.includes("walmart")) return "Walmart";
+  if (host.includes("target")) return "Target";
+  const sub = host.split(".")[0];
   return sub && sub !== "queue-it" && sub !== "static" ? sub : "a retailer";
 }
 

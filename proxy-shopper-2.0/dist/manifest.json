@@ -9,6 +9,7 @@
     "https://www.target.com/*",
     "https://redsky.target.com/*",
     "https://www.pokemoncenter.com/*",
+    "https://www.walmart.com/*",
     "https://*.queue-it.net/*",
     "https://discord.com/*"
   ],
@@ -37,7 +38,11 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.target.com/*", "https://www.pokemoncenter.com/*"],
+      "matches": [
+        "https://www.target.com/*",
+        "https://www.pokemoncenter.com/*",
+        "https://www.walmart.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     },

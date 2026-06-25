@@ -31,6 +31,14 @@ export interface UserSettings {
   assistAutoAdvanceCheckout: boolean;
 
   /**
+   * Queue-it waiting-room detector. When on, the extension alerts you the
+   * moment your browser is dropped into a Queue-it waiting room (Pokémon
+   * Center, Walmart, Target, …) — i.e. a drop just went live — and again when
+   * you clear the line. It only reports the queue; it never bypasses it.
+   */
+  queueDetectorEnabled: boolean;
+
+  /**
    * Optional Discord webhook URL. When set, every alert that fires is also
    * posted to this Discord channel (in addition to the browser notification),
    * so alerts reach you wherever you watch Discord.
@@ -50,5 +58,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   assistAutoOpenTab: false,
   assistAutoAddToCart: false,
   assistAutoAdvanceCheckout: false,
+  queueDetectorEnabled: true,
   discordWebhookUrl: "",
 };

@@ -49,6 +49,7 @@ function deriveRetailerName(): string | undefined {
       continue;
     }
     if (host.includes("pokemoncenter")) return "Pokémon Center";
+    if (host.includes("walmart")) return "Walmart";
     if (host.includes("target")) return "Target";
     if (host && !host.includes("queue-it")) return host;
   }
