@@ -9,6 +9,7 @@
     "https://www.target.com/*",
     "https://redsky.target.com/*",
     "https://www.pokemoncenter.com/*",
+    "https://*.queue-it.net/*",
     "https://discord.com/*"
   ],
   "background": {
@@ -39,6 +40,12 @@
       "matches": ["https://www.target.com/*", "https://www.pokemoncenter.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.queue-it.net/*"],
+      "js": ["queue.js"],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ]
 }

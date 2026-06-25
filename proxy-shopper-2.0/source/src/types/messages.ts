@@ -8,7 +8,20 @@ export type BackgroundMessage =
   /** Sent by the content script with data extracted from a live page. */
   | { type: "LIVE_PRODUCT_DATA"; data: ProductData }
   /** Content script asks whether Proxy Assist should activate for this product. */
-  | { type: "GET_ASSIST_INFO"; retailerId: string; productId: string };
+  | { type: "GET_ASSIST_INFO"; retailerId: string; productId: string }
+  /**
+   * A Queue-it waiting room was detected ("waiting"), or the user just cleared
+   * one and landed back on the retailer with a queue token ("passed"). Sent by
+   * the queue detector / retailer content scripts so the background can alert.
+   */
+  | {
+      type: "QUEUE_EVENT";
+      phase: "waiting" | "passed";
+      host: string;
+      pageUrl: string;
+      targetUrl?: string;
+      retailerName?: string;
+    };
 
 /** Message handled by the content script (sent via chrome.tabs.sendMessage). */
 export interface GetLiveDataMessage {

@@ -707,6 +707,41 @@ async function checkAssist(url: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// "Through the queue" detection
+// ---------------------------------------------------------------------------
+//
+// When Queue-it lets you out of a waiting room it sends you back to the
+// retailer with a `queueittoken` on the URL. Landing here with that token means
+// you just cleared the line — time to buy. We report it once per token so the
+// background can ping you; we never touch the token or the queue itself.
+
+function maybeReportQueuePassed(url: string): void {
+  let token: string | null = null;
+  try {
+    token = new URL(url).searchParams.get("queueittoken");
+  } catch {
+    /* not parseable — nothing to do */
+  }
+  if (!token) return;
+
+  const seenKey = `proxy-shopper-queue-passed:${token.slice(0, 24)}`;
+  try {
+    if (sessionStorage.getItem(seenKey)) return;
+    sessionStorage.setItem(seenKey, "1");
+  } catch {
+    /* sessionStorage blocked — background dedupe still guards against spam */
+  }
+
+  void sendToBackground({
+    type: "QUEUE_EVENT",
+    phase: "passed",
+    host: location.hostname,
+    pageUrl: location.href,
+    retailerName: getAdapterForUrl(url)?.retailerName,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Boot + SPA navigation handling
 // ---------------------------------------------------------------------------
 
@@ -723,6 +758,7 @@ function onPageEnter(): void {
     window.clearTimeout(advanceTimer);
     advancesDone = 0;
   }
+  maybeReportQueuePassed(url);
   void extractAndReport(url);
   void checkAssist(url);
 }
