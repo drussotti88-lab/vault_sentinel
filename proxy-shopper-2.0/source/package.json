@@ -1,0 +1,26 @@
+{
+  "name": "proxy-shopper",
+  "displayName": "Proxy Shopper 2.0",
+  "version": "0.1.0",
+  "description": "Intelligent purchase assistant that monitors products, alerts you to opportunities, and assists you through the buying process.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build && vite build --config vite.content.config.ts",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

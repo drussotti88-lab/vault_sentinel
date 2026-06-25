@@ -1,0 +1,44 @@
+Proxy Shopper 2.0 — Install on any computer
+============================================
+
+This package contains TWO things:
+
+  dist\     -> the ready-to-load extension (no setup needed)
+  source\   -> the full source code (only needed if you want to edit/rebuild)
+
+
+OPTION A — Just install it (recommended, no tools required)
+-----------------------------------------------------------
+1. Unzip this file anywhere you like (e.g. Documents). Keep the folder put —
+   the extension runs from these files, so don't delete or move them after
+   loading.
+2. Open Chrome and go to:  chrome://extensions
+3. Turn ON "Developer mode" (top-right toggle).
+4. Click "Load unpacked".
+5. Select the  dist  folder inside this package.
+6. Pin "Proxy Shopper 2.0" from the toolbar puzzle-piece menu.
+
+That's it. Requires Chrome 116 or newer.
+
+To move to another computer: copy this whole folder over (or re-unzip the
+same file) and repeat steps 2–6. Each computer keeps its own watchlist.
+
+
+OPTION B — Edit / rebuild from source
+-------------------------------------
+Requires Node.js 18+ (https://nodejs.org).
+1. Open a terminal in the  source  folder.
+2. npm install
+3. npm run build
+4. Load the newly created  source\dist  folder via Load unpacked (as above).
+   After each rebuild, click the reload (circular arrow) icon on the
+   extension's card in chrome://extensions.
+
+
+Notes
+-----
+- Your watchlist and settings are stored locally in Chrome (chrome.storage),
+  per computer. Use Options -> Export data / Import data to move them between
+  machines.
+- No payment data (card number, CVV, passwords) is ever stored by this
+  extension. The optional checkout profile holds contact + shipping only.

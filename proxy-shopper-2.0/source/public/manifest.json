@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Proxy Shopper 2.0",
+  "version": "0.1.0",
+  "description": "Watches products for you, alerts you when price or stock conditions are met, and assists you through the purchase.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "alarms", "notifications", "offscreen", "sidePanel", "tabs", "scripting"],
+  "host_permissions": ["https://www.target.com/*", "https://redsky.target.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/popup/index.html"
+  },
+  "action": {
+    "default_title": "Proxy Shopper 2.0",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "src/options/index.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.target.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

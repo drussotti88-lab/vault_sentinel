@@ -1,0 +1,159 @@
+:root {
+  /* Vault theme — matches the side panel. */
+  --accent: #e6b450;
+  --accent-dark: #b8881f;
+  --bg: #0e1014;
+  --bg-elev: #161a21;
+  --card-bg: #181d25;
+  --text: #ece6d6;
+  --text-dim: #97a0b0;
+  --border: #2b3240;
+  --red: #f06b6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 500px at 50% -200px, rgba(230, 180, 80, 0.06), transparent),
+    var(--bg);
+  min-height: 100vh;
+}
+
+input,
+input::placeholder {
+  color: var(--text);
+}
+
+input {
+  background: var(--bg-elev);
+}
+
+input::placeholder {
+  color: var(--text-dim);
+}
+
+.options__header h1 {
+  color: var(--accent);
+}
+
+.btn--primary,
+.options__status {
+  color: #20180a !important;
+}
+
+.options {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+.options__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.options__header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.options__status {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.section h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.field input {
+  width: 140px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.field-row {
+  display: flex;
+  gap: 18px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover {
+  filter: brightness(0.96);
+}
+
+.btn--danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
