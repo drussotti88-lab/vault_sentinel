@@ -2,10 +2,46 @@ import type { BackgroundMessage, CheckResponse } from "../types";
 import { getProduct, getSettings, onSettingsChanged } from "../shared/storage";
 import { getAdapterById } from "../retailers/registry";
 import { checkAllProducts, checkProduct, applyLiveData, updateBadge } from "./monitor";
-import { productIdFromNotification } from "./notifications";
+import { productIdFromNotification, showQueueAlert } from "./notifications";
 import { getAssistInfo } from "./assist";
 
 const CHECK_ALARM = "proxy-shopper-check";
+
+// ---------------------------------------------------------------------------
+// Queue-it events (dedupe so a refreshing waiting room can't spam alerts)
+// ---------------------------------------------------------------------------
+
+const QUEUE_DEDUPE_KEY = "queueLastAlert";
+const QUEUE_DEDUPE_MS = 90_000;
+
+async function handleQueueEvent(
+  message: Extract<BackgroundMessage, { type: "QUEUE_EVENT" }>,
+): Promise<void> {
+  const dedupeId = `${message.phase}|${message.host}`;
+  const store = await chrome.storage.local.get(QUEUE_DEDUPE_KEY);
+  const last = (store[QUEUE_DEDUPE_KEY] as Record<string, number> | undefined) ?? {};
+  const now = Date.now();
+  if (last[dedupeId] && now - last[dedupeId] < QUEUE_DEDUPE_MS) return;
+
+  // Prune stale entries so the map can't grow without bound, then record this one.
+  for (const [key, ts] of Object.entries(last)) {
+    if (now - ts > QUEUE_DEDUPE_MS) delete last[key];
+  }
+  last[dedupeId] = now;
+  await chrome.storage.local.set({ [QUEUE_DEDUPE_KEY]: last });
+
+  const settings = await getSettings();
+  await showQueueAlert(
+    {
+      phase: message.phase,
+      host: message.host,
+      pageUrl: message.pageUrl,
+      targetUrl: message.targetUrl,
+      retailerName: message.retailerName,
+    },
+    settings,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Scheduling
@@ -75,6 +111,14 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage & { target?: st
       getAssistInfo(message.retailerId, message.productId)
         .then(sendResponse)
         .catch(() => sendResponse({ active: false }));
+      return true;
+    }
+    case "QUEUE_EVENT": {
+      handleQueueEvent(message)
+        .then(() => sendResponse({ ok: true } satisfies CheckResponse))
+        .catch((error) =>
+          sendResponse({ ok: false, error: String(error) } satisfies CheckResponse),
+        );
       return true;
     }
     default:
