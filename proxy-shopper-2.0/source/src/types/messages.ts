@@ -10,13 +10,15 @@ export type BackgroundMessage =
   /** Content script asks whether Proxy Assist should activate for this product. */
   | { type: "GET_ASSIST_INFO"; retailerId: string; productId: string }
   /**
-   * A Queue-it waiting room was detected ("waiting"), or the user just cleared
-   * one and landed back on the retailer with a queue token ("passed"). Sent by
-   * the queue detector / retailer content scripts so the background can alert.
+   * A drop-related site-state event. "waiting" = landed in a Queue-it waiting
+   * room; "passed" = cleared one and landed back on the retailer with a queue
+   * token; "maintenance" = the retailer page is showing a maintenance screen (a
+   * drop is often staged during maintenance). Sent by the queue detector /
+   * retailer content scripts so the background can alert.
    */
   | {
       type: "QUEUE_EVENT";
-      phase: "waiting" | "passed";
+      phase: "waiting" | "passed" | "maintenance";
       host: string;
       pageUrl: string;
       targetUrl?: string;

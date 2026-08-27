@@ -139,9 +139,13 @@ export function productIdFromNotification(notificationId: string): string | unde
 // ---------------------------------------------------------------------------
 
 export interface QueueAlert {
-  /** "waiting" = a drop is live and you're in line; "passed" = you're through. */
-  phase: "waiting" | "passed";
-  /** The queue-it.net host (waiting) or retailer host (passed). */
+  /**
+   * "waiting" = a drop is live and you're in line; "passed" = you're through;
+   * "maintenance" = the retailer put the site into a maintenance screen (a drop
+   * is often being staged).
+   */
+  phase: "waiting" | "passed" | "maintenance";
+  /** The queue-it.net host (waiting) or retailer host (passed / maintenance). */
   host: string;
   /** The page the alert links to. */
   pageUrl: string;
@@ -174,12 +178,18 @@ export async function showQueueAlert(event: QueueAlert, settings: UserSettings):
   if (!settings.enableNotifications) return;
 
   const where = queueLabel(event);
-  const title =
-    event.phase === "waiting" ? "🎟️ Drop is live — you're in the queue" : "✅ You're through the queue!";
-  const message =
-    event.phase === "waiting"
-      ? `A Queue-it waiting room opened for ${where}. A drop is happening right now — keep this tab open and it will advance you automatically.`
-      : `You just cleared the ${where} queue. Buy now — checkout while your spot is good.`;
+  let title: string;
+  let message: string;
+  if (event.phase === "waiting") {
+    title = "🎟️ Drop is live — you're in the queue";
+    message = `A Queue-it waiting room opened for ${where}. A drop is happening right now — keep this tab open and it will advance you automatically.`;
+  } else if (event.phase === "passed") {
+    title = "✅ You're through the queue!";
+    message = `You just cleared the ${where} queue. Buy now — checkout while your spot is good.`;
+  } else {
+    title = "🚧 Site maintenance detected";
+    message = `${where} is showing a maintenance screen. Drops are often staged during maintenance — keep this tab open and get ready.`;
+  }
 
   const id = `${QUEUE_NOTIFICATION_PREFIX}${event.phase}__${Date.now()}`;
   await chrome.notifications.create(id, {

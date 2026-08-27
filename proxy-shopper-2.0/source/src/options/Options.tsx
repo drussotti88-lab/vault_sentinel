@@ -139,9 +139,41 @@ export function Options() {
         <p className="hint">
           Watches for <strong>Queue-it</strong> waiting rooms on Pokémon Center, Walmart, and Target.
           The moment a drop bounces your browser into a queue you get a notification (and a Discord
-          ping, if set) — and again when you clear the line. It only tells you the queue is
-          happening; it never bypasses, skips, or automates it. These alerts ignore quiet hours
-          since a live drop is time-critical. Turn this off to silence them.
+          ping, if set) — and again when you clear the line, and when the store shows a maintenance
+          screen. It only tells you what's happening; it never bypasses, skips, or automates a queue.
+          These alerts ignore quiet hours since a live drop is time-critical. Turn this off to
+          silence them.
+        </p>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            disabled={!settings.queueDetectorEnabled}
+            checked={settings.keepWarmEnabled}
+            onChange={(e) => void update({ keepWarmEnabled: e.target.checked })}
+          />
+          <span>Keep-warm: auto-refresh an open store tab so a queue is caught hands-free</span>
+        </label>
+        <label className="field">
+          <span>Keep-warm refresh every (seconds)</span>
+          <input
+            type="number"
+            min={15}
+            max={300}
+            disabled={!settings.queueDetectorEnabled || !settings.keepWarmEnabled}
+            value={settings.keepWarmIntervalSec}
+            onChange={(e) => {
+              const v = Math.max(15, Math.min(300, Number(e.target.value) || 30));
+              void update({ keepWarmIntervalSec: v });
+            }}
+          />
+        </label>
+        <p className="hint">
+          Leave a Pokémon Center / Walmart / Target tab open and Proxy Shopper quietly reloads it on
+          this interval, so the instant a drop flips the page into a queue or maintenance screen it's
+          caught — no manual refreshing. It <strong>never</strong> reloads a cart/checkout page or a
+          page already in a queue, so it can't cost you your spot. Best turned on only while you're
+          camping a drop; takes effect the next time the tab loads. Faster refresh finds it sooner
+          but hits the store more often.
         </p>
       </section>
 

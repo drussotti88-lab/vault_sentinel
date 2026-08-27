@@ -742,6 +742,81 @@ function maybeReportQueuePassed(url: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Site-maintenance detection
+// ---------------------------------------------------------------------------
+//
+// Retailers often flip the store into a maintenance screen right before a drop.
+// If this page is one, tell the background so it can ping — once per tab
+// session. (An active Queue-it room is handled by the queue.js content script.)
+
+const MAINTENANCE_RE =
+  /(under|scheduled|site) maintenance|maintenance mode|we'?ll be (right )?back|be right back|down for maintenance|temporarily unavailable/i;
+const MAINTENANCE_FIRED_KEY = "proxy-shopper-maintenance-fired";
+
+/**
+ * A maintenance page is short and says so. Requiring a small body length keeps a
+ * full product page that merely contains the phrase somewhere from tripping it.
+ */
+function pageLooksLikeMaintenance(): boolean {
+  if (MAINTENANCE_RE.test(document.title)) return true;
+  const text = document.body?.innerText ?? "";
+  return text.length < 3000 && MAINTENANCE_RE.test(text);
+}
+
+function maybeReportMaintenance(): void {
+  if (!pageLooksLikeMaintenance()) return;
+  try {
+    if (sessionStorage.getItem(MAINTENANCE_FIRED_KEY)) return;
+    sessionStorage.setItem(MAINTENANCE_FIRED_KEY, "1");
+  } catch {
+    /* sessionStorage blocked — background dedupe still guards against spam */
+  }
+  void sendToBackground({
+    type: "QUEUE_EVENT",
+    phase: "maintenance",
+    host: location.hostname,
+    pageUrl: location.href,
+    retailerName: getAdapterForUrl(location.href)?.retailerName,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Keep-warm auto-refresh (opt-in)
+// ---------------------------------------------------------------------------
+//
+// While camping a drop, quietly reload this store tab on an interval so a queue
+// or maintenance screen is caught the instant it appears — no manual F5. One
+// reload is scheduled per document load (the fresh page schedules the next), and
+// it refuses to reload a cart/checkout page or a page already showing a queue.
+
+function isQueueingNow(): boolean {
+  if (/queue-it\.net/i.test(location.hostname)) return true;
+  if (document.querySelector('iframe[src*="queue-it" i]')) return true;
+  return /queue-it\.net|waiting room/i.test((document.body?.textContent ?? "").slice(0, 2000));
+}
+
+function isCheckoutish(url: string): boolean {
+  try {
+    return /\/(cart|checkout|order)/.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function scheduleKeepWarm(): Promise<void> {
+  const settings = await getSettings();
+  if (!settings.keepWarmEnabled) return;
+  if (isCheckoutish(location.href)) return; // never interrupt a purchase
+  if (isQueueingNow()) return; // never reload out of a queue
+  const seconds = Math.min(300, Math.max(15, settings.keepWarmIntervalSec || 30));
+  window.setTimeout(() => {
+    // Re-check guards at fire time; state may have changed since scheduling.
+    if (isCheckoutish(location.href) || isQueueingNow()) return;
+    location.reload();
+  }, seconds * 1000);
+}
+
+// ---------------------------------------------------------------------------
 // Boot + SPA navigation handling
 // ---------------------------------------------------------------------------
 
@@ -759,11 +834,13 @@ function onPageEnter(): void {
     advancesDone = 0;
   }
   maybeReportQueuePassed(url);
+  maybeReportMaintenance();
   void extractAndReport(url);
   void checkAssist(url);
 }
 
 onPageEnter();
+void scheduleKeepWarm();
 
 // Target navigates client-side; poll for URL changes cheaply.
 setInterval(() => {

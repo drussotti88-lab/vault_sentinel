@@ -39,6 +39,17 @@ export interface UserSettings {
   queueDetectorEnabled: boolean;
 
   /**
+   * Keep-warm auto-refresh. When on, an open Pokémon Center / Target / Walmart
+   * tab is quietly reloaded on an interval so a drop that flips the page into a
+   * maintenance screen or a Queue-it waiting room is caught hands-free — no
+   * manual refreshing. Never reloads cart/checkout pages or a page already in a
+   * queue. Opt-in: best used only while camping a drop.
+   */
+  keepWarmEnabled: boolean;
+  /** Seconds between keep-warm reloads (clamped 15–300). */
+  keepWarmIntervalSec: number;
+
+  /**
    * Optional Discord webhook URL. When set, every alert that fires is also
    * posted to this Discord channel (in addition to the browser notification),
    * so alerts reach you wherever you watch Discord.
@@ -59,5 +70,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   assistAutoAddToCart: false,
   assistAutoAdvanceCheckout: false,
   queueDetectorEnabled: true,
+  keepWarmEnabled: false,
+  keepWarmIntervalSec: 30,
   discordWebhookUrl: "",
 };
