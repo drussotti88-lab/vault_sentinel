@@ -14,6 +14,13 @@ const numFromEnv = (def: number) =>
     .transform((v) => (v === undefined || v === '' ? def : Number(v)))
     .pipe(z.number().finite());
 
+const boolFromEnv = (def: boolean) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined || v === '' ? def : !/^(0|false|no|off)$/i.test(v)))
+    .pipe(z.boolean());
+
 const schema = z.object({
   discord: z.object({
     botToken: z.string().min(1, 'DISCORD_BOT_TOKEN is required'),
@@ -37,6 +44,11 @@ const schema = z.object({
     cacheTtlSec: numFromEnv(43200),
   }),
   proxyPoolUrl: z.string().optional().default(''),
+  siteMonitor: z.object({
+    enabled: boolFromEnv(true),
+    intervalSec: numFromEnv(60),
+    url: z.string().url().optional().default('https://www.pokemoncenter.com/'),
+  }),
   engine: z.object({
     globalIntervalSec: numFromEnv(45),
     alertCooldownSec: numFromEnv(300),
@@ -75,6 +87,11 @@ export function loadConfig(): Config {
       cacheTtlSec: process.env.MARKET_CACHE_TTL_SEC,
     },
     proxyPoolUrl: process.env.PROXY_POOL_URL,
+    siteMonitor: {
+      enabled: process.env.SITE_MONITOR_ENABLED,
+      intervalSec: process.env.SITE_MONITOR_INTERVAL_SEC,
+      url: process.env.SITE_MONITOR_URL,
+    },
     engine: {
       globalIntervalSec: process.env.GLOBAL_POLL_INTERVAL_SEC,
       alertCooldownSec: process.env.ALERT_COOLDOWN_SEC,
