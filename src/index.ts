@@ -1,6 +1,7 @@
 import { loadConfig } from './lib/config.js';
 import { createLogger } from './lib/logger.js';
 import { Engine } from './core/engine.js';
+import { SiteMonitor } from './core/siteMonitor.js';
 import { startBot } from './bot/index.js';
 import { startControlApi } from './api/server.js';
 
@@ -45,9 +46,20 @@ async function main(): Promise<void> {
     process.exit(1);
   });
 
+  // Pokémon Center site-state monitor: watches for maintenance / queue going
+  // live 24/7 and pings the PC channel. Runs its own loop; a failure here must
+  // never take down the engine, so it's isolated with its own catch.
+  const siteMonitor = new SiteMonitor();
+  void siteMonitor.start().catch((err) => {
+    logger.error('site monitor crashed', {
+      error: err instanceof Error ? err : new Error(String(err)),
+    });
+  });
+
   const shutdown = (signal: string) => {
     logger.info('shutting down', { signal });
     engine.stop();
+    siteMonitor.stop();
     void client.destroy();
     api.close();
     setTimeout(() => process.exit(0), 1000);
